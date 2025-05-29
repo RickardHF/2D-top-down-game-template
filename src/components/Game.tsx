@@ -1,24 +1,9 @@
-// filepath: c:\repos\simple-ai-game\src\components\Game.tsx
 import { useEffect, useRef, useState } from 'react';
-
-// Game types
-type Direction = 'up' | 'down' | 'left' | 'right' | 'none';
-
-// Base interface for all game entities
-interface GameObject {
-  id: string;
-  x: number;
-  y: number;
-  direction: Direction;
-  speed: number;
-  size: number;
-  pulse: number;
-}
-
-// Player interface - now with cleaner structure
-interface Player extends GameObject {
-  isAI?: boolean;
-}
+import { Player, AIVision, Direction } from './game/types';
+import { directionColors, aiDirectionColors } from './game/constants';
+import { drawGrid, drawAiVisionCone, drawPlayer } from './game/rendering';
+import { updatePlayer } from './game/HumanPlayer';
+import { updateAiPlayer } from './game/AIPlayer';
 
 const Game = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -47,7 +32,7 @@ const Game = () => {
   });
   
   // AI vision state
-  const [aiVision, setAiVision] = useState({
+  const [aiVision, setAiVision] = useState<AIVision>({
     canSeePlayer: false,
     visionConeAngle: 220, // 220 degrees vision cone
     visionDistance: 40 * 4 // 4x the body size (40 is body diameter)
@@ -55,24 +40,6 @@ const Game = () => {
   
   // Track pressed keys
   const [keysPressed, setKeysPressed] = useState<{ [key: string]: boolean }>({});
-  
-  // Colors for different directions
-  const directionColors = {
-    up: '#FF6B6B',    // Red
-    down: '#4ECDC4',  // Teal
-    left: '#FFD166',  // Yellow
-    right: '#6A0572', // Purple
-    none: '#FFFFFF',  // White
-  };
-  
-  // AI player colors (with different hues)
-  const aiDirectionColors = {
-    up: '#9D50BB',    // Purple
-    down: '#00B4DB',  // Blue
-    left: '#F2994A',  // Orange
-    right: '#4CAF50', // Green
-    none: '#AAAAAA',  // Gray
-  };
 
   // Handle key events
   useEffect(() => {
@@ -111,9 +78,26 @@ const Game = () => {
   useEffect(() => {
     let animationFrameId: number;
     const gameLoop = () => {
-      updatePlayer();
-      updateAiPlayer();
+      // Update player position
+      setPlayer(prevPlayer => 
+        updatePlayer(prevPlayer, keysPressed, canvasRef.current)
+      );
+      
+      // Update AI player position and vision
+      const { updatedAiPlayer, updatedAiVision } = updateAiPlayer(
+        aiPlayer,
+        player,
+        aiVision,
+        canvasRef.current
+      );
+      
+      setAiPlayer(updatedAiPlayer);
+      setAiVision(updatedAiVision);
+      
+      // Render game
       renderGame();
+      
+      // Continue the game loop
       animationFrameId = requestAnimationFrame(gameLoop);
     };
     
@@ -124,223 +108,6 @@ const Game = () => {
     };
   }, [keysPressed, player, aiPlayer, aiVision]);
   
-  // Check if player is within AI's vision cone
-  const checkAiVision = () => {
-    // Calculate vector from AI to player
-    const dx = player.x - aiPlayer.x;
-    const dy = player.y - aiPlayer.y;
-    
-    // Calculate distance between AI and player
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    
-    // If player is too far, AI can't see it
-    if (distance > aiVision.visionDistance) {
-      setAiVision(prev => ({ ...prev, canSeePlayer: false }));
-      return;
-    }
-    
-    // Calculate the angle between AI's direction and the player
-    let directionAngle: number;
-    switch (aiPlayer.direction) {
-      case 'up':
-        directionAngle = -90; // -90 degrees (up is negative y)
-        break;
-      case 'down':
-        directionAngle = 90; // 90 degrees (down is positive y)
-        break;
-      case 'left':
-        directionAngle = 180; // 180 degrees (left is negative x)
-        break;
-      case 'right':
-        directionAngle = 0; // 0 degrees (right is positive x)
-        break;
-      default:
-        setAiVision(prev => ({ ...prev, canSeePlayer: false }));
-        return; // If AI has no direction, it can't see
-    }
-    
-    // Calculate the angle to the player in degrees
-    const angleToPlayer = Math.atan2(dy, dx) * (180 / Math.PI);
-    
-    // Calculate the difference between the two angles
-    let angleDiff = Math.abs(angleToPlayer - directionAngle);
-    // Ensure the angle difference is between 0 and 180 degrees
-    if (angleDiff > 180) {
-      angleDiff = 360 - angleDiff;
-    }
-    
-    // Check if player is within the vision cone
-    const isInCone = angleDiff <= aiVision.visionConeAngle / 2;
-    
-    // Update the AI vision state
-    setAiVision(prev => ({ ...prev, canSeePlayer: isInCone }));
-  };
-  
-  // Update AI player position based on its current direction
-  const updateAiPlayer = () => {
-    // First, check if AI can see the player
-    checkAiVision();
-    
-    let newX = aiPlayer.x;
-    let newY = aiPlayer.y;
-    
-    if (aiVision.canSeePlayer) {
-      // If AI can see player, calculate the distance to the player
-      const dx = player.x - aiPlayer.x;
-      const dy = player.y - aiPlayer.y;
-      
-      // Calculate distance to player
-      const distanceToPlayer = Math.sqrt(dx * dx + dy * dy);
-      
-      // If AI is close enough to the player, stop moving
-      if (distanceToPlayer < aiPlayer.size + player.size) {
-        // Stop moving but keep tracking the player
-        let trackingDirection: Direction = aiPlayer.direction;
-        
-        // Update direction to face the player even when standing still
-        if (Math.abs(dx) > Math.abs(dy)) {
-          trackingDirection = dx > 0 ? 'right' : 'left';
-        } else {
-          trackingDirection = dy > 0 ? 'down' : 'up';
-        }
-        
-        // Update direction but don't move
-        if (trackingDirection !== aiPlayer.direction) {
-          setAiPlayer(prev => ({ ...prev, direction: trackingDirection }));
-        }
-        
-        // Return early to prevent movement
-        return;
-      }
-      
-      // Determine which direction to move based on player position
-      let newDirection: Direction = aiPlayer.direction;
-      
-      // Decide whether to move horizontally or vertically based on the larger distance
-      if (Math.abs(dx) > Math.abs(dy)) {
-        // Move horizontally
-        newDirection = dx > 0 ? 'right' : 'left';
-      } else {
-        // Move vertically
-        newDirection = dy > 0 ? 'down' : 'up';
-      }
-      
-      // Update AI direction
-      if (newDirection !== aiPlayer.direction) {
-        setAiPlayer(prev => ({ ...prev, direction: newDirection }));
-      }
-      
-      // Move towards player
-      switch (newDirection) {
-        case 'up':
-          newY -= aiPlayer.speed;
-          break;
-        case 'down':
-          newY += aiPlayer.speed;
-          break;
-        case 'left':
-          newX -= aiPlayer.speed;
-          break;
-        case 'right':
-          newX += aiPlayer.speed;
-          break;
-      }
-    } else {
-      // If AI can't see player, move based on current direction
-      switch (aiPlayer.direction) {
-        case 'up':
-          newY -= aiPlayer.speed;
-          break;
-        case 'down':
-          newY += aiPlayer.speed;
-          break;
-        case 'left':
-          newX -= aiPlayer.speed;
-          break;
-        case 'right':
-          newX += aiPlayer.speed;
-          break;
-      }
-    }
-    
-    // Keep AI player within canvas bounds and change direction if hitting a wall
-    const canvas = canvasRef.current;
-    if (canvas) {
-      // Check if AI player would go out of bounds
-      const wouldHitWall = 
-        newX < aiPlayer.size || 
-        newX > canvas.width - aiPlayer.size ||
-        newY < aiPlayer.size || 
-        newY > canvas.height - aiPlayer.size;
-      
-      // Change direction if hitting a wall
-      if (wouldHitWall) {
-        // Choose a direction that would move away from the wall
-        const availableDirections: Direction[] = [];
-        
-        if (aiPlayer.x > aiPlayer.size + 50) availableDirections.push('left');
-        if (aiPlayer.x < canvas.width - aiPlayer.size - 50) availableDirections.push('right');
-        if (aiPlayer.y > aiPlayer.size + 50) availableDirections.push('up');
-        if (aiPlayer.y < canvas.height - aiPlayer.size - 50) availableDirections.push('down');
-        
-        // Choose a random available direction
-        if (availableDirections.length > 0) {
-          const newDirection = availableDirections[Math.floor(Math.random() * availableDirections.length)];
-          setAiPlayer(prev => ({ ...prev, direction: newDirection }));
-        }
-      }
-      
-      // Ensure the AI stays within bounds regardless
-      newX = Math.max(aiPlayer.size, Math.min(canvas.width - aiPlayer.size, newX));
-      newY = Math.max(aiPlayer.size, Math.min(canvas.height - aiPlayer.size, newY));
-    }
-    
-    setAiPlayer(prev => ({
-      ...prev,
-      x: newX,
-      y: newY,
-      pulse: (prev.pulse + 0.08) % (Math.PI * 2) // Slightly different pulse speed
-    }));
-  };
-
-  // Update player position based on key presses
-  const updatePlayer = () => {
-    let newX = player.x;
-    let newY = player.y;
-    let newDirection: Direction = 'none';
-
-    if (keysPressed['w']) {
-      newY -= player.speed;
-      newDirection = 'up';
-    } else if (keysPressed['s']) {
-      newY += player.speed;
-      newDirection = 'down';
-    }
-
-    if (keysPressed['a']) {
-      newX -= player.speed;
-      newDirection = 'left';
-    } else if (keysPressed['d']) {
-      newX += player.speed;
-      newDirection = 'right';
-    }
-
-    // Keep player within canvas bounds
-    const canvas = canvasRef.current;
-    if (canvas) {
-      newX = Math.max(player.size, Math.min(canvas.width - player.size, newX));
-      newY = Math.max(player.size, Math.min(canvas.height - player.size, newY));
-    }
-    
-    setPlayer({
-      ...player,
-      x: newX,
-      y: newY,
-      direction: newDirection === 'none' ? player.direction : newDirection,
-      pulse: (player.pulse + 0.1) % (Math.PI * 2) // Increment pulse for animation
-    });
-  };
-
   // Render the game
   const renderGame = () => {
     const canvas = canvasRef.current;
@@ -356,7 +123,7 @@ const Game = () => {
     drawGrid(ctx, canvas);
     
     // Draw the AI vision cone first so it appears behind the players
-    drawAiVisionCone(ctx);
+    drawAiVisionCone(ctx, aiPlayer, aiVision.canSeePlayer, aiVision.visionConeAngle, aiVision.visionDistance);
       
     // Then draw AI player
     drawPlayer(ctx, aiPlayer);
@@ -364,133 +131,6 @@ const Game = () => {
     // Finally draw human player (so it appears on top if they overlap)
     drawPlayer(ctx, player);
   };
-  
-  // Helper function to draw grid
-  const drawGrid = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
-    ctx.strokeStyle = '#EEEEEE';
-    ctx.lineWidth = 1;
-    
-    // Vertical lines
-    for (let x = 0; x < canvas.width; x += 40) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, canvas.height);
-      ctx.stroke();
-    }
-    
-    // Horizontal lines
-    for (let y = 0; y < canvas.height; y += 40) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(canvas.width, y);
-      ctx.stroke();
-    }
-  };
-  
-  // Helper function to draw AI vision cone
-  const drawAiVisionCone = (ctx: CanvasRenderingContext2D) => {
-    if (aiPlayer.direction === 'none') return;
-    
-    // Calculate the cone angle in radians
-    const coneAngleRad = (aiVision.visionConeAngle * Math.PI) / 180;
-    
-    // Get the base angle based on AI direction
-    let baseAngle: number;
-    switch (aiPlayer.direction) {
-      case 'up':
-        baseAngle = -Math.PI / 2; // -90 degrees
-        break;
-      case 'down':
-        baseAngle = Math.PI / 2; // 90 degrees
-        break;
-      case 'left':
-        baseAngle = Math.PI; // 180 degrees
-        break;
-      case 'right':
-        baseAngle = 0; // 0 degrees
-        break;
-      default:
-        return;
-    }
-    
-    // Calculate the start and end angles for the cone
-    const startAngle = baseAngle - coneAngleRad / 2;
-    const endAngle = baseAngle + coneAngleRad / 2;
-    
-    // Draw the vision cone
-    ctx.beginPath();
-    ctx.moveTo(aiPlayer.x, aiPlayer.y);
-    ctx.arc(
-      aiPlayer.x,
-      aiPlayer.y,
-      aiVision.visionDistance,
-      startAngle,
-      endAngle
-    );
-    ctx.closePath();
-    
-    // Fill the cone with a semi-transparent color
-    const fillColor = aiVision.canSeePlayer ? 'rgba(255, 100, 100, 0.2)' : 'rgba(100, 150, 255, 0.2)';
-    ctx.fillStyle = fillColor;
-    ctx.fill();
-    
-    // Draw the cone border
-    ctx.strokeStyle = aiVision.canSeePlayer ? 'rgba(255, 50, 50, 0.5)' : 'rgba(50, 100, 255, 0.5)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  };
-  
-  // Helper function to draw player
-  const drawPlayer = (ctx: CanvasRenderingContext2D, p: Player) => {
-    const colors = p.isAI ? aiDirectionColors : directionColors;
-    const pulseSize = p.size + Math.sin(p.pulse) * 2;
-    
-    // Draw the player (ball)
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, pulseSize, 0, Math.PI * 2);
-    ctx.fillStyle = colors[p.direction];
-    ctx.fill();
-    ctx.strokeStyle = p.isAI ? '#333333' : '#000000';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    
-    // Add label to distinguish between players
-    ctx.font = '12px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#FFFFFF';
-    ctx.fillText(p.isAI ? 'AI' : 'P1', p.x, p.y + 4);
-    
-    // Draw direction indicator
-    if (p.direction !== 'none') {
-      ctx.beginPath();
-      
-      // Starting point is the center of the player
-      const indicatorLength = p.size + 10;
-      
-      switch (p.direction) {
-        case 'up':
-          ctx.moveTo(p.x, p.y);
-          ctx.lineTo(p.x, p.y - indicatorLength);
-          break;
-        case 'down':
-          ctx.moveTo(p.x, p.y);
-          ctx.lineTo(p.x, p.y + indicatorLength);
-          break;
-        case 'left':
-          ctx.moveTo(p.x, p.y);
-          ctx.lineTo(p.x - indicatorLength, p.y);
-          break;
-        case 'right':
-          ctx.moveTo(p.x, p.y);
-          ctx.lineTo(p.x + indicatorLength, p.y);
-          break;
-      }
-      
-      ctx.strokeStyle = p.isAI ? '#333333' : '#000000';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-    }
-  };      
 
   return (
     <div className="flex flex-col items-center">
