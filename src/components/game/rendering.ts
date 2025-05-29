@@ -1,4 +1,4 @@
-import { Player, Direction, Box } from './types';
+import { Player, Box } from './types';
 import { directionColors, aiDirectionColors } from './constants';
 
 // Helper function to draw grid
@@ -103,7 +103,6 @@ export const drawAiVisionCone = (
   
   // Calculate the start and end angles for the cone
   const startAngle = baseAngle - coneAngleRad / 2;
-  const endAngle = baseAngle + coneAngleRad / 2;
   
   // Number of rays to cast
   const rayCount = 60; // Higher = better quality but lower performance

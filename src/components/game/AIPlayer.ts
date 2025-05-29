@@ -1,4 +1,4 @@
-import { Player, Direction, AIVision, Box } from './types';
+import { Player, AIVision, Box } from './types';
 import { calculateNonCollidingPosition } from './collision';
 
 // Check if a line intersects with a box
