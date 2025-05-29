@@ -1,11 +1,59 @@
 import { Player, Direction, AIVision, Box } from './types';
 import { calculateNonCollidingPosition } from './collision';
 
-// Check if player is within AI's vision cone
+// Check if a line intersects with a box
+const lineIntersectsBox = (
+  x1: number, y1: number,
+  x2: number, y2: number,
+  box: Box
+): boolean => {
+  // Box bounds
+  const left = box.x - box.width / 2;
+  const right = box.x + box.width / 2;
+  const top = box.y - box.height / 2;
+  const bottom = box.y + box.height / 2;
+  
+  // Function to check if a line segment intersects with a horizontal or vertical line
+  const intersects = (
+    x1: number, y1: number,
+    x2: number, y2: number,
+    x3: number, y3: number,
+    x4: number, y4: number
+  ): boolean => {
+    // Calculate the denominator
+    const den = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1);
+    
+    // If den is 0, lines are parallel
+    if (den === 0) return false;
+    
+    // Calculate ua and ub parameters
+    const ua = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / den;
+    const ub = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / den;
+    
+    // Return true if the intersection point is on both line segments
+    return ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1;
+  };
+  
+  // Check if the line intersects with any of the box sides
+  return (
+    // Top edge
+    intersects(x1, y1, x2, y2, left, top, right, top) ||
+    // Right edge
+    intersects(x1, y1, x2, y2, right, top, right, bottom) ||
+    // Bottom edge
+    intersects(x1, y1, x2, y2, left, bottom, right, bottom) ||
+    // Left edge
+    intersects(x1, y1, x2, y2, left, top, left, bottom)
+  );
+};
+
+// Check if player is within AI's vision cone and no obstacles block the view
 export const checkAiVision = (
   aiPlayer: Player,
   player: Player,
-  aiVision: AIVision
+  aiVision: AIVision,
+  boxes: Box[] = [],
+  otherPlayer?: Player // Can optionally check if another player blocks the view
 ): AIVision => {
   // Calculate vector from AI to player
   const dx = player.x - aiPlayer.x;
@@ -38,7 +86,34 @@ export const checkAiVision = (
   // Check if player is within the vision cone
   const isInCone = angleDiff <= visionConeAngleRad / 2;
   
-  // Update the AI vision state
+  // If not in cone, definitely can't see
+  if (!isInCone) {
+    return { ...aiVision, canSeePlayer: false };
+  }
+  
+  // Check if line of sight is blocked by any boxes
+  for (const box of boxes) {
+    if (lineIntersectsBox(aiPlayer.x, aiPlayer.y, player.x, player.y, box)) {
+      return { ...aiVision, canSeePlayer: false };
+    }
+  }
+  
+  // Check if line of sight is blocked by another player (if provided)
+  if (otherPlayer && otherPlayer.id !== player.id && otherPlayer.id !== aiPlayer.id) {
+    // Approximate the other player as a square for intersection test
+    const playerBox: Box = {
+      ...otherPlayer,
+      width: otherPlayer.size * 2,
+      height: otherPlayer.size * 2,
+      color: 'unused'
+    };
+    
+    if (lineIntersectsBox(aiPlayer.x, aiPlayer.y, player.x, player.y, playerBox)) {
+      return { ...aiVision, canSeePlayer: false };
+    }
+  }
+  
+  // No obstacles in the way, player is visible
   return { ...aiVision, canSeePlayer: isInCone };
 };
 
@@ -50,8 +125,8 @@ export const updateAiPlayer = (
   canvas: HTMLCanvasElement | null,
   boxes: Box[] = []
 ): { updatedAiPlayer: Player, updatedAiVision: AIVision } => {
-  // First, check if AI can see the player
-  const updatedAiVision = checkAiVision(aiPlayer, player, aiVision);
+  // First, check if AI can see the player, passing in the boxes to check for line-of-sight
+  const updatedAiVision = checkAiVision(aiPlayer, player, aiVision, boxes);
   
   let newX = aiPlayer.x;
   let newY = aiPlayer.y;

@@ -42,13 +42,56 @@ export const drawBox = (ctx: CanvasRenderingContext2D, box: Box) => {
   ctx.stroke();
 };
 
-// Helper function to draw AI vision cone
+// Function to check if a ray intersects with a box and returns the distance to intersection
+const rayBoxIntersection = (
+  x0: number, y0: number, // Ray origin
+  dirX: number, dirY: number, // Ray direction (normalized)
+  box: Box
+): number | null => {
+  // Box bounds
+  const left = box.x - box.width / 2;
+  const right = box.x + box.width / 2;
+  const top = box.y - box.height / 2;
+  const bottom = box.y + box.height / 2;
+  
+  // Calculate inverse of direction to avoid division
+  const invDirX = dirX !== 0 ? 1.0 / dirX : Infinity;
+  const invDirY = dirY !== 0 ? 1.0 / dirY : Infinity;
+  
+  // Calculate intersections with rectangle bounds
+  const txMin = (left - x0) * invDirX;
+  const txMax = (right - x0) * invDirX;
+  
+  // Get min and max intersections on x-axis
+  let tMin = Math.min(txMin, txMax);
+  let tMax = Math.max(txMin, txMax);
+  
+  const tyMin = (top - y0) * invDirY;
+  const tyMax = (bottom - y0) * invDirY;
+  
+  // Find the intersection of the ranges
+  tMin = Math.max(tMin, Math.min(tyMin, tyMax));
+  tMax = Math.min(tMax, Math.max(tyMin, tyMax));
+  
+  // If tMax < 0, ray intersects box, but entire box is behind the ray origin
+  // If tMin > tMax, ray doesn't intersect box
+  if (tMax < 0 || tMin > tMax) {
+    return null;
+  }
+  
+  // Return the distance to the intersection, but only if it's in front of the ray origin
+  return tMin > 0 ? tMin : tMax;
+};
+
+// Helper function to draw AI vision cone with proper obstacle occlusion
 export const drawAiVisionCone = (
   ctx: CanvasRenderingContext2D, 
   aiPlayer: Player, 
   canSeePlayer: boolean, 
   visionConeAngle: number, 
-  visionDistance: number
+  visionDistance: number,
+  boxes: Box[] = [],
+  player?: Player
 ) => {
   if (aiPlayer.direction === 'none') return;
   
@@ -62,27 +105,74 @@ export const drawAiVisionCone = (
   const startAngle = baseAngle - coneAngleRad / 2;
   const endAngle = baseAngle + coneAngleRad / 2;
   
-  // Draw the vision cone
+  // Number of rays to cast
+  const rayCount = 60; // Higher = better quality but lower performance
+  
+  // Save context state
+  ctx.save();
+  
+  // Prepare to draw the vision cone using rays
   ctx.beginPath();
   ctx.moveTo(aiPlayer.x, aiPlayer.y);
-  ctx.arc(
-    aiPlayer.x,
-    aiPlayer.y,
-    visionDistance,
-    startAngle,
-    endAngle
-  );
+  
+  // Cast rays around the vision cone to create the polygon shape
+  for (let i = 0; i <= rayCount; i++) {
+    const rayAngle = startAngle + (i / rayCount) * coneAngleRad;
+    
+    // Calculate ray direction vector (normalized)
+    const dirX = Math.cos(rayAngle);
+    const dirY = Math.sin(rayAngle);
+    
+    // Initialize rayLength to the vision distance
+    let rayLength = visionDistance;
+    
+    // Check intersection with each box and update rayLength if needed
+    for (const box of boxes) {
+      const dist = rayBoxIntersection(aiPlayer.x, aiPlayer.y, dirX, dirY, box);
+      if (dist !== null && dist < rayLength) {
+        rayLength = dist;
+      }
+    }
+    
+    // Also check if player blocks the ray (if provided and not the target)
+    if (player && player.id !== aiPlayer.id) {
+      // Create a box representation of the player for intersection test
+      const playerBox: Box = {
+        ...player,
+        width: player.size * 2,
+        height: player.size * 2,
+        color: 'unused'
+      };
+      
+      const dist = rayBoxIntersection(aiPlayer.x, aiPlayer.y, dirX, dirY, playerBox);
+      if (dist !== null && dist < rayLength) {
+        rayLength = dist;
+      }
+    }
+    
+    // Calculate the endpoint of the ray
+    const endX = aiPlayer.x + dirX * rayLength;
+    const endY = aiPlayer.y + dirY * rayLength;
+    
+    // Draw line to the endpoint
+    ctx.lineTo(endX, endY);
+  }
+  
+  // Close the path back to the AI player position
   ctx.closePath();
   
-  // Fill the cone with a semi-transparent color
+  // Fill the vision cone with a semi-transparent color
   const fillColor = canSeePlayer ? 'rgba(255, 100, 100, 0.2)' : 'rgba(100, 150, 255, 0.2)';
   ctx.fillStyle = fillColor;
   ctx.fill();
   
-  // Draw the cone border
+  // Draw the vision cone border
   ctx.strokeStyle = canSeePlayer ? 'rgba(255, 50, 50, 0.5)' : 'rgba(50, 100, 255, 0.5)';
   ctx.lineWidth = 1;
   ctx.stroke();
+  
+  // Restore the context
+  ctx.restore();
 };
 
 // Helper function to draw player

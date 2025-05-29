@@ -197,9 +197,8 @@ const Game = () => {
     boxes.forEach(box => {
       drawBox(ctx, box);
     });
-    
-    // Draw the AI vision cone above boxes but behind players
-    drawAiVisionCone(ctx, aiPlayer, aiVision.canSeePlayer, aiVision.visionConeAngle, aiVision.visionDistance);
+      // Draw the AI vision cone above boxes but behind players
+    drawAiVisionCone(ctx, aiPlayer, aiVision.canSeePlayer, aiVision.visionConeAngle, aiVision.visionDistance, boxes, player);
       
     // Then draw AI player
     drawPlayer(ctx, aiPlayer);
