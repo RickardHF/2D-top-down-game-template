@@ -1,20 +1,31 @@
+// filepath: c:\repos\simple-ai-game\src\components\Game.tsx
 import { useEffect, useRef, useState } from 'react';
 
+// Game types
 type Direction = 'up' | 'down' | 'left' | 'right' | 'none';
 
-interface Player {
+// Base interface for all game entities
+interface GameObject {
+  id: string;
   x: number;
   y: number;
   direction: Direction;
   speed: number;
   size: number;
   pulse: number;
+}
+
+// Player interface - now with cleaner structure
+interface Player extends GameObject {
   isAI?: boolean;
 }
 
 const Game = () => {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);  
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  
+  // Human-controlled player
   const [player, setPlayer] = useState<Player>({
+    id: 'player1',
     x: 400,
     y: 300,
     direction: 'none',
@@ -22,8 +33,10 @@ const Game = () => {
     size: 20,
     pulse: 0
   });
-    // AI-controlled player
+  
+  // AI-controlled player
   const [aiPlayer, setAiPlayer] = useState<Player>({
+    id: 'ai1',
     x: 200,
     y: 200,
     direction: 'none',
@@ -36,12 +49,13 @@ const Game = () => {
   // AI vision state
   const [aiVision, setAiVision] = useState({
     canSeePlayer: false,
-    visionConeAngle: 220, // 30 degrees vision cone
-    visionDistance: 40 * 4 // 2x the body size (40 is body diameter)
+    visionConeAngle: 220, // 220 degrees vision cone
+    visionDistance: 40 * 4 // 4x the body size (40 is body diameter)
   });
   
   // Track pressed keys
   const [keysPressed, setKeysPressed] = useState<{ [key: string]: boolean }>({});
+  
   // Colors for different directions
   const directionColors = {
     up: '#FF6B6B',    // Red
@@ -78,6 +92,7 @@ const Game = () => {
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, []);
+  
   // AI movement logic
   useEffect(() => {
     const aiMovementInterval = setInterval(() => {
@@ -107,8 +122,9 @@ const Game = () => {
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [keysPressed, player, aiPlayer]);
-    // Check if player is within AI's vision cone
+  }, [keysPressed, player, aiPlayer, aiVision]);
+  
+  // Check if player is within AI's vision cone
   const checkAiVision = () => {
     // Calculate vector from AI to player
     const dx = player.x - aiPlayer.x;
@@ -169,9 +185,33 @@ const Game = () => {
     let newY = aiPlayer.y;
     
     if (aiVision.canSeePlayer) {
-      // If AI can see player, calculate the direction to move toward the player
+      // If AI can see player, calculate the distance to the player
       const dx = player.x - aiPlayer.x;
       const dy = player.y - aiPlayer.y;
+      
+      // Calculate distance to player
+      const distanceToPlayer = Math.sqrt(dx * dx + dy * dy);
+      
+      // If AI is close enough to the player, stop moving
+      if (distanceToPlayer < aiPlayer.size + player.size) {
+        // Stop moving but keep tracking the player
+        let trackingDirection: Direction = aiPlayer.direction;
+        
+        // Update direction to face the player even when standing still
+        if (Math.abs(dx) > Math.abs(dy)) {
+          trackingDirection = dx > 0 ? 'right' : 'left';
+        } else {
+          trackingDirection = dy > 0 ? 'down' : 'up';
+        }
+        
+        // Update direction but don't move
+        if (trackingDirection !== aiPlayer.direction) {
+          setAiPlayer(prev => ({ ...prev, direction: trackingDirection }));
+        }
+        
+        // Return early to prevent movement
+        return;
+      }
       
       // Determine which direction to move based on player position
       let newDirection: Direction = aiPlayer.direction;
@@ -288,15 +328,16 @@ const Game = () => {
     // Keep player within canvas bounds
     const canvas = canvasRef.current;
     if (canvas) {
-      newX = Math.max(20, Math.min(canvas.width - 20, newX));
-      newY = Math.max(20, Math.min(canvas.height - 20, newY));
-    }    setPlayer({
+      newX = Math.max(player.size, Math.min(canvas.width - player.size, newX));
+      newY = Math.max(player.size, Math.min(canvas.height - player.size, newY));
+    }
+    
+    setPlayer({
+      ...player,
       x: newX,
       y: newY,
       direction: newDirection === 'none' ? player.direction : newDirection,
-      speed: player.speed,
-      size: player.size,
-      pulse: (player.pulse + 0.1) % (Math.PI * 2), // Increment pulse for animation
+      pulse: (player.pulse + 0.1) % (Math.PI * 2) // Increment pulse for animation
     });
   };
 
@@ -312,6 +353,20 @@ const Game = () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // Draw a grid for the top-down view
+    drawGrid(ctx, canvas);
+    
+    // Draw the AI vision cone first so it appears behind the players
+    drawAiVisionCone(ctx);
+      
+    // Then draw AI player
+    drawPlayer(ctx, aiPlayer);
+      
+    // Finally draw human player (so it appears on top if they overlap)
+    drawPlayer(ctx, player);
+  };
+  
+  // Helper function to draw grid
+  const drawGrid = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
     ctx.strokeStyle = '#EEEEEE';
     ctx.lineWidth = 1;
     
@@ -322,125 +377,121 @@ const Game = () => {
       ctx.lineTo(x, canvas.height);
       ctx.stroke();
     }
-      // Horizontal lines
+    
+    // Horizontal lines
     for (let y = 0; y < canvas.height; y += 40) {
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(canvas.width, y);
       ctx.stroke();
     }
-      // Draw the AI vision cone first so it appears behind the players
-    const drawAiVisionCone = () => {
-      if (aiPlayer.direction === 'none') return;
+  };
+  
+  // Helper function to draw AI vision cone
+  const drawAiVisionCone = (ctx: CanvasRenderingContext2D) => {
+    if (aiPlayer.direction === 'none') return;
+    
+    // Calculate the cone angle in radians
+    const coneAngleRad = (aiVision.visionConeAngle * Math.PI) / 180;
+    
+    // Get the base angle based on AI direction
+    let baseAngle: number;
+    switch (aiPlayer.direction) {
+      case 'up':
+        baseAngle = -Math.PI / 2; // -90 degrees
+        break;
+      case 'down':
+        baseAngle = Math.PI / 2; // 90 degrees
+        break;
+      case 'left':
+        baseAngle = Math.PI; // 180 degrees
+        break;
+      case 'right':
+        baseAngle = 0; // 0 degrees
+        break;
+      default:
+        return;
+    }
+    
+    // Calculate the start and end angles for the cone
+    const startAngle = baseAngle - coneAngleRad / 2;
+    const endAngle = baseAngle + coneAngleRad / 2;
+    
+    // Draw the vision cone
+    ctx.beginPath();
+    ctx.moveTo(aiPlayer.x, aiPlayer.y);
+    ctx.arc(
+      aiPlayer.x,
+      aiPlayer.y,
+      aiVision.visionDistance,
+      startAngle,
+      endAngle
+    );
+    ctx.closePath();
+    
+    // Fill the cone with a semi-transparent color
+    const fillColor = aiVision.canSeePlayer ? 'rgba(255, 100, 100, 0.2)' : 'rgba(100, 150, 255, 0.2)';
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+    
+    // Draw the cone border
+    ctx.strokeStyle = aiVision.canSeePlayer ? 'rgba(255, 50, 50, 0.5)' : 'rgba(50, 100, 255, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  };
+  
+  // Helper function to draw player
+  const drawPlayer = (ctx: CanvasRenderingContext2D, p: Player) => {
+    const colors = p.isAI ? aiDirectionColors : directionColors;
+    const pulseSize = p.size + Math.sin(p.pulse) * 2;
+    
+    // Draw the player (ball)
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, pulseSize, 0, Math.PI * 2);
+    ctx.fillStyle = colors[p.direction];
+    ctx.fill();
+    ctx.strokeStyle = p.isAI ? '#333333' : '#000000';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    // Add label to distinguish between players
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(p.isAI ? 'AI' : 'P1', p.x, p.y + 4);
+    
+    // Draw direction indicator
+    if (p.direction !== 'none') {
+      ctx.beginPath();
       
-      // Calculate the cone angle in radians
-      const coneAngleRad = (aiVision.visionConeAngle * Math.PI) / 180;
+      // Starting point is the center of the player
+      const indicatorLength = p.size + 10;
       
-      // Get the base angle based on AI direction
-      let baseAngle: number;
-      switch (aiPlayer.direction) {
+      switch (p.direction) {
         case 'up':
-          baseAngle = -Math.PI / 2; // -90 degrees
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x, p.y - indicatorLength);
           break;
         case 'down':
-          baseAngle = Math.PI / 2; // 90 degrees
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x, p.y + indicatorLength);
           break;
         case 'left':
-          baseAngle = Math.PI; // 180 degrees
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x - indicatorLength, p.y);
           break;
         case 'right':
-          baseAngle = 0; // 0 degrees
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x + indicatorLength, p.y);
           break;
-        default:
-          return;
       }
       
-      // Calculate the start and end angles for the cone
-      const startAngle = baseAngle - coneAngleRad / 2;
-      const endAngle = baseAngle + coneAngleRad / 2;
-      
-      // Draw the vision cone
-      ctx.beginPath();
-      ctx.moveTo(aiPlayer.x, aiPlayer.y);
-      ctx.arc(
-        aiPlayer.x,
-        aiPlayer.y,
-        aiVision.visionDistance,
-        startAngle,
-        endAngle
-      );
-      ctx.closePath();
-      
-      // Fill the cone with a semi-transparent color
-      const fillColor = aiVision.canSeePlayer ? 'rgba(255, 100, 100, 0.2)' : 'rgba(100, 150, 255, 0.2)';
-      ctx.fillStyle = fillColor;
-      ctx.fill();
-      
-      // Draw the cone border
-      ctx.strokeStyle = aiVision.canSeePlayer ? 'rgba(255, 50, 50, 0.5)' : 'rgba(50, 100, 255, 0.5)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    };
-    
-    // Draw both players
-    const drawPlayer = (p: Player) => {
-      const colors = p.isAI ? aiDirectionColors : directionColors;
-      const pulseSize = p.size + Math.sin(p.pulse) * 2;
-      
-      // Draw the player (ball)
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, pulseSize, 0, Math.PI * 2);
-      ctx.fillStyle = colors[p.direction];
-      ctx.fill();
       ctx.strokeStyle = p.isAI ? '#333333' : '#000000';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 3;
       ctx.stroke();
-      
-      // Add label to distinguish between players
-      ctx.font = '12px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillText(p.isAI ? 'AI' : 'P1', p.x, p.y + 4);
-      
-      // Draw direction indicator
-      if (p.direction !== 'none') {
-        ctx.beginPath();
-        
-        // Starting point is the center of the player
-        const indicatorLength = p.size + 10;
-        
-        switch (p.direction) {
-          case 'up':
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(p.x, p.y - indicatorLength);
-            break;
-          case 'down':
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(p.x, p.y + indicatorLength);
-            break;
-          case 'left':
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(p.x - indicatorLength, p.y);
-            break;
-          case 'right':
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(p.x + indicatorLength, p.y);
-            break;
-        }
-        
-        ctx.strokeStyle = p.isAI ? '#333333' : '#000000';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-      }
-    };      // First draw the AI vision cone
-    drawAiVisionCone();
-      
-      // Then draw AI player
-    drawPlayer(aiPlayer);
-      
-      // Finally draw human player (so it appears on top if they overlap)
-    drawPlayer(player);
-  };
+    }
+  };      
+
   return (
     <div className="flex flex-col items-center">
       <h1 className="text-2xl font-bold mb-4">Simple 2D Game</h1>
@@ -452,7 +503,8 @@ const Game = () => {
           className="bg-gray-100"
         ></canvas>
         <div className="absolute top-4 left-4 bg-black/50 text-white p-2 rounded">
-          <p>Use <span className="font-bold">WASD</span> keys to move</p>          <p>Player direction: <span className="font-bold uppercase">{player.direction}</span></p>
+          <p>Use <span className="font-bold">WASD</span> keys to move</p>
+          <p>Player direction: <span className="font-bold uppercase">{player.direction}</span></p>
           <p>AI direction: <span className="font-bold uppercase">{aiPlayer.direction}</span></p>
           <p>AI vision: 
             <span className={`font-bold ml-1 ${aiVision.canSeePlayer ? 'text-red-400' : ''}`}>
