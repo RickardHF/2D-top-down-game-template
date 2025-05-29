@@ -206,16 +206,16 @@ const Game = () => {
     // Finally draw human player (so it appears on top if they overlap)
     drawPlayer(ctx, player);
   };
-
   return (
     <div className="flex flex-col items-center">
-      <h1 className="text-2xl font-bold mb-4">Simple 2D Game</h1>      <div className="relative border-2 border-gray-300 rounded-md overflow-hidden">
+      <h1 className="text-2xl font-bold mb-4">Simple 2D Game</h1>
+      <div className="relative border-2 border-gray-300 dark:border-gray-700 rounded-md overflow-hidden shadow-lg">
         <canvas 
           ref={canvasRef} 
           width={800} 
           height={600}
-          className="bg-gray-100"
-        ></canvas>        <div className="absolute top-4 left-4 bg-black/50 text-white p-2 rounded">
+        ></canvas>
+        <div className="absolute top-4 left-4 bg-black/60 dark:bg-black/80 text-white p-3 rounded-md shadow-md backdrop-blur-sm">
           <p>Use <span className="font-bold">WASD</span> keys to move</p>
           <p>Player facing: <span className="font-bold uppercase">{player.direction}</span> ({(player.rotation * 180 / Math.PI).toFixed(0)}°)</p>
           <p>AI facing: <span className="font-bold uppercase">{aiPlayer.direction}</span> ({(aiPlayer.rotation * 180 / Math.PI).toFixed(0)}°)</p>
@@ -253,7 +253,8 @@ const Game = () => {
             </div>
           </div>
         </div>
-      </div>      <div className="mt-6 p-4 bg-gray-100 rounded-md max-w-2xl">        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4">
+      </div>
+      <div className="mt-6 p-4 bg-gray-100 dark:bg-zinc-800 rounded-md max-w-2xl shadow-md">        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4">
           <h2 className="font-bold">Game Controls:</h2>
           <div className="flex items-center gap-4 mt-2 md:mt-0">
             <div className="flex items-center gap-2">
@@ -264,23 +265,24 @@ const Game = () => {
                 min="1" 
                 max="10" 
                 defaultValue="2" 
-                className="w-24"
+                className="w-24 accent-blue-500 dark:accent-blue-400"
                 onChange={(e) => setBoxes(generateRandomBoxes(parseInt(e.target.value)))}
               />
               <span className="text-sm">{boxes.length}</span>
             </div>
             <button 
-              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 transition-colors"
               onClick={() => setBoxes(generateRandomBoxes(boxes.length))}
             >
               Regenerate Boxes
             </button>
           </div>
-        </div>        <ul className="list-disc pl-5">
-          <li><span className="font-mono bg-gray-200 px-2 py-0.5 rounded">W</span> - Move Forward</li>
-          <li><span className="font-mono bg-gray-200 px-2 py-0.5 rounded">S</span> - Move Backward</li>
-          <li><span className="font-mono bg-gray-200 px-2 py-0.5 rounded">A</span> - Rotate Left</li>
-          <li><span className="font-mono bg-gray-200 px-2 py-0.5 rounded">D</span> - Rotate Right</li>
+        </div>
+        <ul className="list-disc pl-5">
+          <li><span className="font-mono bg-gray-200 dark:bg-zinc-700 px-2 py-0.5 rounded">W</span> - Move Forward</li>
+          <li><span className="font-mono bg-gray-200 dark:bg-zinc-700 px-2 py-0.5 rounded">S</span> - Move Backward</li>
+          <li><span className="font-mono bg-gray-200 dark:bg-zinc-700 px-2 py-0.5 rounded">A</span> - Rotate Left</li>
+          <li><span className="font-mono bg-gray-200 dark:bg-zinc-700 px-2 py-0.5 rounded">D</span> - Rotate Right</li>
         </ul>
       </div>
     </div>

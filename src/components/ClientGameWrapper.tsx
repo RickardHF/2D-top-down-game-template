@@ -9,5 +9,9 @@ const GameWithNoSSR = dynamic(() => import('./Game'), {
 });
 
 export default function ClientGameWrapper() {
-  return <GameWithNoSSR />;
+  return (
+    <div className="rounded-lg overflow-hidden shadow-lg p-4 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700">
+      <GameWithNoSSR />
+    </div>
+  );
 }

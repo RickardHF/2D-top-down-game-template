@@ -3,8 +3,15 @@ import { directionColors, aiDirectionColors } from './constants';
 
 // Helper function to draw grid
 export const drawGrid = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement) => {
-  ctx.strokeStyle = '#EEEEEE';
+  // Get grid color from CSS variables
+  const gridColor = getComputedStyle(document.documentElement).getPropertyValue('--grid-color').trim() || '#EEEEEE';
+  ctx.strokeStyle = gridColor;
   ctx.lineWidth = 1;
+  
+  // Set canvas background
+  const canvasBg = getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg').trim() || '#f0f0f0';
+  ctx.fillStyle = canvasBg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
   
   // Vertical lines
   for (let x = 0; x < canvas.width; x += 40) {
@@ -27,6 +34,9 @@ export const drawGrid = (ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElemen
 export const drawBox = (ctx: CanvasRenderingContext2D, box: Box) => {
   const pulseSize = box.pulse ? Math.sin(box.pulse) * 2 : 0;
   
+  // Get border color from CSS variables
+  const borderColor = getComputedStyle(document.documentElement).getPropertyValue('--border-color').trim() || '#333333';
+  
   // Draw the box
   ctx.beginPath();
   ctx.rect(
@@ -37,7 +47,7 @@ export const drawBox = (ctx: CanvasRenderingContext2D, box: Box) => {
   );
   ctx.fillStyle = box.color;
   ctx.fill();
-  ctx.strokeStyle = '#333333';
+  ctx.strokeStyle = borderColor;
   ctx.lineWidth = 2;
   ctx.stroke();
 };
