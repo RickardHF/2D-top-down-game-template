@@ -1,22 +1,63 @@
 import { useEffect, useRef, useState } from 'react';
-import { Player, AIVision, Direction } from './game/types';
+import { Player, AIVision, Direction, Box } from './game/types';
 import { directionColors, aiDirectionColors } from './game/constants';
-import { drawGrid, drawAiVisionCone, drawPlayer } from './game/rendering';
+import { drawGrid, drawAiVisionCone, drawPlayer, drawBox } from './game/rendering';
 import { updatePlayer } from './game/HumanPlayer';
 import { updateAiPlayer } from './game/AIPlayer';
 
+// Function to generate random boxes
+const generateRandomBoxes = (count: number, canvasWidth: number = 800, canvasHeight: number = 600): Box[] => {
+  const boxes: Box[] = [];
+  const minSize = 40;
+  const maxSize = 80;
+  
+  for (let i = 0; i < count; i++) {
+    // Random size between minSize and maxSize
+    const width = Math.floor(Math.random() * (maxSize - minSize)) + minSize;
+    const height = Math.floor(Math.random() * (maxSize - minSize)) + minSize;
+    
+    // Random position, ensuring box is fully within canvas
+    const x = Math.floor(Math.random() * (canvasWidth - width)) + width/2;
+    const y = Math.floor(Math.random() * (canvasHeight - height)) + height/2;
+    
+    // Random color
+    const r = Math.floor(Math.random() * 200) + 50;
+    const g = Math.floor(Math.random() * 200) + 50;
+    const b = Math.floor(Math.random() * 200) + 50;
+    const color = `rgb(${r}, ${g}, ${b})`;
+    
+    boxes.push({
+      id: `box-${i}`,
+      x,
+      y,
+      width,
+      height,
+      color,
+      direction: 'none',
+      speed: 0,
+      size: Math.max(width, height) / 2,
+      pulse: Math.random() * Math.PI * 2, // Random starting pulse phase
+      rotation: 0,
+      rotationSpeed: 0
+    });
+  }
+  
+  return boxes;
+};
+
 const Game = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  
-  // Human-controlled player
+    // Human-controlled player
   const [player, setPlayer] = useState<Player>({
     id: 'player1',
     x: 400,
     y: 300,
-    direction: 'none',
+    direction: 'right',
     speed: 5,
     size: 20,
-    pulse: 0
+    pulse: 0,
+    rotation: 0, // Initially facing right (0 radians)
+    rotationSpeed: 0.1 // Speed of rotation when turning
   });
   
   // AI-controlled player
@@ -24,12 +65,22 @@ const Game = () => {
     id: 'ai1',
     x: 200,
     y: 200,
-    direction: 'none',
+    direction: 'right',
     speed: 3, // Slightly slower than human player
     size: 20,
     pulse: Math.PI, // Start at different phase for visual distinction
-    isAI: true
+    isAI: true,
+    rotation: 0, // Initially facing right (0 radians)
+    rotationSpeed: 0.08 // Slightly slower rotation than the player
   });
+  
+  // Create boxes (obstacles)
+  const [boxes, setBoxes] = useState<Box[]>([]);
+  
+  // Initialize boxes when component mounts
+  useEffect(() => {
+    setBoxes(generateRandomBoxes(2)); // Generate 2 random boxes
+  }, []);
   
   // AI vision state
   const [aiVision, setAiVision] = useState<AIVision>({
@@ -59,36 +110,58 @@ const Game = () => {
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, []);
-  
-  // AI movement logic
+    // AI movement logic
   useEffect(() => {
     const aiMovementInterval = setInterval(() => {
-      // Only change direction randomly if AI can't see the player
+      // Only change rotation randomly if AI can't see the player
       if (!aiVision.canSeePlayer && Math.random() < 0.1) { // 10% chance on each interval to change direction
-        const directions: Direction[] = ['up', 'down', 'left', 'right'];
-        const randomDirection = directions[Math.floor(Math.random() * directions.length)];
-        setAiPlayer(prev => ({ ...prev, direction: randomDirection }));
+        // Random rotation change - between -π/2 and π/2 (quarter turn in either direction)
+        const randomRotation = Math.random() * Math.PI - Math.PI/2;
+        setAiPlayer(prev => {
+          let newRotation = (prev.rotation || 0) + randomRotation;
+          // Keep rotation in 0-2π range
+          if (newRotation < 0) newRotation += Math.PI * 2;
+          if (newRotation >= Math.PI * 2) newRotation -= Math.PI * 2;
+          
+          // Update direction based on new rotation angle
+          let newDirection: Direction = 'right';
+          if (newRotation >= 7 * Math.PI / 4 || newRotation < Math.PI / 4) {
+            newDirection = 'right';
+          } else if (newRotation >= Math.PI / 4 && newRotation < 3 * Math.PI / 4) {
+            newDirection = 'down';
+          } else if (newRotation >= 3 * Math.PI / 4 && newRotation < 5 * Math.PI / 4) {
+            newDirection = 'left';
+          } else {
+            newDirection = 'up';
+          }
+          
+          return { 
+            ...prev, 
+            rotation: newRotation,
+            direction: newDirection 
+          };
+        });
       }
     }, 200); // Check for direction change every 200ms
     
     return () => clearInterval(aiMovementInterval);
   }, [aiVision.canSeePlayer]);
-  
-  // Game loop
+    // Game loop
   useEffect(() => {
     let animationFrameId: number;
     const gameLoop = () => {
-      // Update player position
+      // Update player position with collision detection
       setPlayer(prevPlayer => 
-        updatePlayer(prevPlayer, keysPressed, canvasRef.current)
+        updatePlayer(prevPlayer, keysPressed, canvasRef.current, boxes, aiPlayer)
       );
       
-      // Update AI player position and vision
+      // Update AI player position and vision with collision detection
       const { updatedAiPlayer, updatedAiVision } = updateAiPlayer(
         aiPlayer,
         player,
         aiVision,
-        canvasRef.current
+        canvasRef.current,
+        boxes
       );
       
       setAiPlayer(updatedAiPlayer);
@@ -106,7 +179,7 @@ const Game = () => {
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [keysPressed, player, aiPlayer, aiVision]);
+  }, [keysPressed, player, aiPlayer, aiVision, boxes]);
   
   // Render the game
   const renderGame = () => {
@@ -114,15 +187,18 @@ const Game = () => {
     if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Clear the canvas
+    if (!ctx) return;    // Clear the canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     // Draw a grid for the top-down view
     drawGrid(ctx, canvas);
     
-    // Draw the AI vision cone first so it appears behind the players
+    // Draw boxes first so they appear as background obstacles
+    boxes.forEach(box => {
+      drawBox(ctx, box);
+    });
+    
+    // Draw the AI vision cone above boxes but behind players
     drawAiVisionCone(ctx, aiPlayer, aiVision.canSeePlayer, aiVision.visionConeAngle, aiVision.visionDistance);
       
     // Then draw AI player
@@ -134,23 +210,23 @@ const Game = () => {
 
   return (
     <div className="flex flex-col items-center">
-      <h1 className="text-2xl font-bold mb-4">Simple 2D Game</h1>
-      <div className="relative border-2 border-gray-300 rounded-md overflow-hidden">
+      <h1 className="text-2xl font-bold mb-4">Simple 2D Game</h1>      <div className="relative border-2 border-gray-300 rounded-md overflow-hidden">
         <canvas 
           ref={canvasRef} 
           width={800} 
           height={600}
           className="bg-gray-100"
-        ></canvas>
-        <div className="absolute top-4 left-4 bg-black/50 text-white p-2 rounded">
+        ></canvas>        <div className="absolute top-4 left-4 bg-black/50 text-white p-2 rounded">
           <p>Use <span className="font-bold">WASD</span> keys to move</p>
-          <p>Player direction: <span className="font-bold uppercase">{player.direction}</span></p>
-          <p>AI direction: <span className="font-bold uppercase">{aiPlayer.direction}</span></p>
+          <p>Player facing: <span className="font-bold uppercase">{player.direction}</span> ({(player.rotation * 180 / Math.PI).toFixed(0)}°)</p>
+          <p>AI facing: <span className="font-bold uppercase">{aiPlayer.direction}</span> ({(aiPlayer.rotation * 180 / Math.PI).toFixed(0)}°)</p>
           <p>AI vision: 
             <span className={`font-bold ml-1 ${aiVision.canSeePlayer ? 'text-red-400' : ''}`}>
               {aiVision.canSeePlayer ? 'PLAYER DETECTED!' : 'Scanning...'}
             </span>
           </p>
+          <p className="text-xs mt-1">Game contains <span className="font-bold">{boxes.length}</span> obstacle boxes</p>
+          <p className="text-xs">Collide with boxes and other players</p>
           
           <div className="mt-2">
             <p className="text-xs mb-1">Player colors:</p>
@@ -178,14 +254,34 @@ const Game = () => {
             </div>
           </div>
         </div>
-      </div>
-      <div className="mt-6 p-4 bg-gray-100 rounded-md max-w-2xl">
-        <h2 className="font-bold mb-2">Game Controls:</h2>
-        <ul className="list-disc pl-5">
-          <li><span className="font-mono bg-gray-200 px-2 py-0.5 rounded">W</span> - Move Up</li>
-          <li><span className="font-mono bg-gray-200 px-2 py-0.5 rounded">A</span> - Move Left</li>
-          <li><span className="font-mono bg-gray-200 px-2 py-0.5 rounded">S</span> - Move Down</li>
-          <li><span className="font-mono bg-gray-200 px-2 py-0.5 rounded">D</span> - Move Right</li>
+      </div>      <div className="mt-6 p-4 bg-gray-100 rounded-md max-w-2xl">        <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4">
+          <h2 className="font-bold">Game Controls:</h2>
+          <div className="flex items-center gap-4 mt-2 md:mt-0">
+            <div className="flex items-center gap-2">
+              <label htmlFor="boxCount" className="text-sm">Box Count:</label>
+              <input 
+                type="range" 
+                id="boxCount" 
+                min="1" 
+                max="10" 
+                defaultValue="2" 
+                className="w-24"
+                onChange={(e) => setBoxes(generateRandomBoxes(parseInt(e.target.value)))}
+              />
+              <span className="text-sm">{boxes.length}</span>
+            </div>
+            <button 
+              className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition-colors"
+              onClick={() => setBoxes(generateRandomBoxes(boxes.length))}
+            >
+              Regenerate Boxes
+            </button>
+          </div>
+        </div>        <ul className="list-disc pl-5">
+          <li><span className="font-mono bg-gray-200 px-2 py-0.5 rounded">W</span> - Move Forward</li>
+          <li><span className="font-mono bg-gray-200 px-2 py-0.5 rounded">S</span> - Move Backward</li>
+          <li><span className="font-mono bg-gray-200 px-2 py-0.5 rounded">A</span> - Rotate Left</li>
+          <li><span className="font-mono bg-gray-200 px-2 py-0.5 rounded">D</span> - Rotate Right</li>
         </ul>
       </div>
     </div>
