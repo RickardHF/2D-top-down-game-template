@@ -1,17 +1,37 @@
 # Simple 2D Game
 
-This is a simple 2D top-down game built with Next.js and React, featuring a character that changes color based on movement direction.
+This is a simple 2D top-down game built with Next.js and React, featuring characters that change color based on movement direction.
 
 ## Game Features
 
 - Top-down view with grid background
-- Ball character that changes color based on movement direction
-- WASD key controls
-- Color indicators for each direction:
+- Two players:
+  - Human player controlled with WASD keys
+  - AI player that moves randomly around the map
+- Both characters change color based on movement direction
+- Visual direction indicators showing which way each player is moving
+- Player identification labels (P1 for human, AI for computer)
+
+### Player Controls & Colors
+- **Human Player:**
   - W (Up): Red
   - S (Down): Teal
   - A (Left): Yellow
   - D (Right): Purple
+
+### AI Player
+- Has a 30-degree vision cone in the direction it's facing
+- Vision extends to twice its body size
+- Changes behavior based on what it sees:
+  - If it can't see the player: moves randomly around the map
+  - If it can see the player: follows and chases the player
+- Vision cone changes color when it detects the player
+- Changes direction when hitting walls
+- Different color scheme:
+  - Up: Purple
+  - Down: Blue
+  - Left: Orange
+  - Right: Green
 
 ## Getting Started
 
