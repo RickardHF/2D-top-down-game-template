@@ -1,4 +1,17 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Simple 2D Game
+
+This is a simple 2D top-down game built with Next.js and React, featuring a character that changes color based on movement direction.
+
+## Game Features
+
+- Top-down view with grid background
+- Ball character that changes color based on movement direction
+- WASD key controls
+- Color indicators for each direction:
+  - W (Up): Red
+  - S (Down): Teal
+  - A (Left): Yellow
+  - D (Right): Purple
 
 ## Getting Started
 
